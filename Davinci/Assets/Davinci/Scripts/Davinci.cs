@@ -20,22 +20,24 @@ using UnityEngine.Networking;
 /// </summary>
 public class Davinci : MonoBehaviour
 {
-    private static bool ENABLE_GLOBAL_LOGS = true;
+    private static bool ENABLE_GLOBAL_LOGS = false;
 
     private bool enableLog = false;
-    private float fadeTime = 1;
+    private float fadeTime = 0.5f;
     private bool cached = true;
 
     private enum RendererType
     {
         none,
         uiImage,
+        uiRawImage,
         renderer,
         sprite
     }
 
     private RendererType rendererType = RendererType.none;
     private GameObject targetObj;
+    private GameObject loaderObj;
     private string url = null;
 
     private Texture2D loadingPlaceholder, errorPlaceholder;
@@ -97,6 +99,20 @@ public class Davinci : MonoBehaviour
     }
 
     /// <summary>
+    /// Set loader component (show load).
+    /// </summary>
+    /// <param name="image">target Unity UI loader component</param>
+    /// <returns></returns>
+    public Davinci loader(GameObject obj)
+    {
+        if (enableLog)
+            Debug.Log("[Davinci] loader object set : " + obj);
+
+        this.loaderObj = obj;
+        return this;
+    }
+
+    /// <summary>
     /// Set target Image component.
     /// </summary>
     /// <param name="image">target Unity UI image component</param>
@@ -108,6 +124,21 @@ public class Davinci : MonoBehaviour
 
         rendererType = RendererType.uiImage;
         this.targetObj = image.gameObject;
+        return this;
+    }
+
+    /// <summary>
+    /// Set target RawImage component.
+    /// </summary>
+    /// <param name="rawImage">target Unity UI raw image component</param>
+    /// <returns></returns>
+    public Davinci into(RawImage rawImage)
+    {
+        if (enableLog)
+            Debug.Log("[Davinci] Target as UIRawImage set : " + rawImage);
+
+        rendererType = RendererType.uiRawImage;
+        this.targetObj = rawImage.gameObject;
         return this;
     }
 
@@ -273,7 +304,7 @@ public class Davinci : MonoBehaviour
             Uri uri = new Uri(url);
             this.url = uri.AbsoluteUri;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             error("Url is not correct.");
             return;
@@ -287,6 +318,9 @@ public class Davinci : MonoBehaviour
 
         if (enableLog)
             Debug.Log("[Davinci] Start Working.");
+
+        if (loaderObj != null)
+            loaderObj.SetActive(true);
 
         if (loadingPlaceholder != null)
             SetLoadingImage();
@@ -389,6 +423,9 @@ public class Davinci : MonoBehaviour
         if (onDownloadProgressChange != null)
             onDownloadProgressChange.Invoke(progress);
 
+        if (loaderObj != null)
+            loaderObj.SetActive(false);
+
         if (enableLog)
             Debug.Log("[Davinci] Downloading progress : " + progress + "%");
 
@@ -484,6 +521,7 @@ public class Davinci : MonoBehaviour
 
                 case RendererType.uiImage:
                     Image image = targetObj.GetComponent<Image>();
+                    AspectRatioFitter fitter = targetObj.GetComponent<AspectRatioFitter>();
 
                     if (image == null)
                         break;
@@ -494,6 +532,9 @@ public class Davinci : MonoBehaviour
                     image.sprite = sprite;
                     color = image.color;
                     maxAlpha = color.a;
+
+                    if (fitter != null)
+                        fitter.aspectRatio = (float)texture.width / (float)texture.height;
 
                     if (fadeTime > 0)
                     {
@@ -510,6 +551,39 @@ public class Davinci : MonoBehaviour
                             yield return null;
                         }
                     }
+                    break;
+
+                case RendererType.uiRawImage:
+                    RawImage rawImage = targetObj.GetComponent<RawImage>();
+                    AspectRatioFitter rawFitter = targetObj.GetComponent<AspectRatioFitter>();
+
+                    if (rawImage == null)
+                        break;
+
+                    rawImage.texture = texture;
+
+                    if (rawFitter != null)
+                        rawFitter.aspectRatio = (float)texture.width / (float)texture.height;
+
+                    color = rawImage.color;
+                    maxAlpha = color.a;
+
+                    if (fadeTime > 0)
+                    {
+                        color.a = 0;
+                        rawImage.color = color;
+
+                        float time = Time.time;
+                        while (color.a < maxAlpha)
+                        {
+                            color.a = Mathf.Lerp(0, maxAlpha, (Time.time - time) / fadeTime);
+
+                            if (rawImage != null)
+                                rawImage.color = color;
+                            yield return null;
+                        }
+                    }
+
                     break;
 
                 case RendererType.sprite:
@@ -655,5 +729,20 @@ public class Davinci : MonoBehaviour
             if (ENABLE_GLOBAL_LOGS)
                 Debug.LogError($"[Davinci] Error while removing cached file: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Clear all davinci cached files if used storage is above a certain size
+    /// </summary>
+    /// <returns></returns>
+    public static void ClearAllCachedFilesIfExceeds(long megaBytes)
+    {
+        long size = 0;
+        DirectoryInfo d = new DirectoryInfo(filePath);
+        FileInfo[] fis = d.GetFiles();
+        foreach (FileInfo fi in fis)
+            size += fi.Length;
+        if ((size / 1048576) >= megaBytes) // 1048576 = 1024 * 1024, bytes to megabytes
+            ClearAllCachedFiles();
     }
 }
