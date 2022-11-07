@@ -88,10 +88,14 @@ Davinci.CleareCache(imageUrl);
 
 //For all files
 Davinci.ClearAllCachedFiles();
+
+//All files if used storage exceeds certain size (MB)
+Davinci.ClearAllCachedFilesIfExceeds(totalSize);
 ```
 
 Also:
-- Supports Unity UI Image Component
+- Supports Unity UI Image/RawImage Components (handles aspect ratio component).
+- Can show/hide "loader" GameObject.
 - Compatible with all platforms and unity versions.
 
 ### Supporting Platforms
